@@ -9,35 +9,47 @@ export interface AuthedRequest extends Request {
 
 /**
  * Expects `Authorization: Bearer <supabase-access-token>`.
- * The token is whatever supabase-auth-js on the frontend gives you after
- * sign in (session.access_token) — this backend never issues its own JWTs
- * and never sees a password.
  */
-export async function requireAuth(req: AuthedRequest, res: Response, next: NextFunction) {
+export async function requireAuth(
+  req: AuthedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   try {
     const header = req.headers.authorization;
 
     if (!header || !header.startsWith("Bearer ")) {
-      return res.status(401).json({ error: "Missing or malformed Authorization header" });
+      res.status(401).json({
+        error: "Missing or malformed Authorization header",
+      });
+      return;
     }
 
     const token = header.slice("Bearer ".length).trim();
+
     if (!token) {
-      return res.status(401).json({ error: "Missing bearer token" });
+      res.status(401).json({
+        error: "Missing bearer token",
+      });
+      return;
     }
 
-    // Ask Supabase to validate the token and return the associated user.
-    // This calls out to Supabase's auth server and also checks expiry/signature.
     const { data, error } = await anonClient.auth.getUser(token);
 
     if (error || !data?.user) {
-      return res.status(401).json({ error: "Invalid or expired session" });
+      res.status(401).json({
+        error: "Invalid or expired session",
+      });
+      return;
     }
 
-    req.user = { id: data.user.id, email: data.user.email ?? undefined };
+    req.user = {
+      id: data.user.id,
+      email: data.user.email ?? undefined,
+    };
+
     req.accessToken = token;
-    // Per-request client scoped to this user's token, so all DB access
-    // downstream is subject to Postgres RLS as this specific user.
+
     req.supabase = getUserScopedClient(token);
 
     next();
